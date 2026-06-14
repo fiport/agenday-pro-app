@@ -4,7 +4,11 @@ export type Appointment = {
   id: string;
   businessId: string;
   businessName: string;
+  businessWhatsapp: string;
   serviceName: string;
+  clientPhone: string;
+  clientName: string;
+  clientAvatarUrl?: string;
   createdAt: string;
 };
 
@@ -45,7 +49,16 @@ export type Business = {
   instagram?: string;
   facebook?: string;
   whatsapp: string;
-  address?: string;
+  // structured address (replaces freeform address)
+  cep?: string;
+  street?: string;
+  addressNumber?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  address?: string; // kept for backwards compat / display fallback
+  lat?: number;
+  lng?: number;
   hours: BusinessHours[];
   services: Service[];
   planExpiresAt?: string;
@@ -62,4 +75,13 @@ export type Sponsor = {
   whatsapp?: string;
   expiresAt?: string;
   imageUrl?: string;
+  cep?: string;
+  street?: string;
+  addressNumber?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
 };

@@ -38,7 +38,7 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="favoritos" hidden={!user} {...tabAppearance}>
+      <NativeTabs.Trigger name="favoritos" hidden={!user || isAdmin} {...tabAppearance}>
         <NativeTabs.Trigger.Label>Favoritos</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: 'heart', selected: 'heart.fill' }}
@@ -46,11 +46,27 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="agendamentos" hidden={!user} {...tabAppearance}>
+      <NativeTabs.Trigger name="agendamentos" hidden={!user || isAdmin} {...tabAppearance}>
         <NativeTabs.Trigger.Label>Agendamentos</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: 'calendar', selected: 'calendar' }}
           md="event"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="dashboard" hidden={!isAdmin} {...tabAppearance}>
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'chart.pie', selected: 'chart.pie.fill' }}
+          md="dashboard"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="relatorios" hidden={!isAdmin} {...tabAppearance}>
+        <NativeTabs.Trigger.Label>Relatórios</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }}
+          md="bar_chart"
         />
       </NativeTabs.Trigger>
 

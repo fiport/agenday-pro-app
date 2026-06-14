@@ -1,17 +1,37 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { arrayRemove, arrayUnion, doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
 
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { Appointment } from '@/types';
 
+type AddAppointmentParams = {
+  businessId: string;
+  businessName: string;
+  businessWhatsapp: string;
+  serviceName: string;
+  clientPhone: string;
+  clientName: string;
+  clientAvatarUrl?: string;
+};
+
 type UserDataContextValue = {
   favoriteIds: string[];
   toggleFavorite: (businessId: string) => Promise<void>;
   appointments: Appointment[];
-  addAppointment: (businessId: string, businessName: string, serviceName: string) => Promise<void>;
-  refresh: () => Promise<void>;
+  addAppointment: (params: AddAppointmentParams) => Promise<void>;
 };
 
 const UserDataContext = createContext<UserDataContextValue | null>(null);
@@ -21,35 +41,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
 
-  const apptKey = user ? `@agenday:appointments:${user.phone}` : null;
   const isAdmin = user?.role === 'admin';
-
-  async function refresh() {
-    if (!user) {
-      setFavoriteIds([]);
-      setAppointments([]);
-      return;
-    }
-
-    if (!isAdmin) {
-      try {
-        const snap = await getDoc(doc(db, 'users', user.phone));
-        const data = snap.data();
-        setFavoriteIds(Array.isArray(data?.favoriteIds) ? (data.favoriteIds as string[]) : []);
-      } catch {
-        // noop
-      }
-    }
-
-    if (apptKey) {
-      try {
-        const raw = await AsyncStorage.getItem(apptKey);
-        setAppointments(raw ? (JSON.parse(raw) as Appointment[]) : []);
-      } catch {
-        // noop
-      }
-    }
-  }
 
   useEffect(() => {
     if (!user) {
@@ -58,24 +50,35 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Favorites — Firestore (skip for admin who has no Firestore doc)
-    if (!isAdmin) {
-      getDoc(doc(db, 'users', user.phone))
-        .then((snap) => {
-          const data = snap.data();
-          setFavoriteIds(Array.isArray(data?.favoriteIds) ? (data!.favoriteIds as string[]) : []);
-        })
-        .catch(() => {});
+    if (isAdmin) {
+      setFavoriteIds([]);
+      setAppointments([]);
+      return;
     }
 
-    // Appointments — AsyncStorage (local history)
-    if (apptKey) {
-      AsyncStorage.getItem(apptKey)
-        .then((raw) => setAppointments(raw ? (JSON.parse(raw) as Appointment[]) : []))
-        .catch(() => {});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.phone]);
+    // Favorites from Firestore user doc
+    const unsub1 = onSnapshot(doc(db, 'users', user.phone), (snap) => {
+      const data = snap.data();
+      setFavoriteIds(Array.isArray(data?.favoriteIds) ? (data!.favoriteIds as string[]) : []);
+    });
+
+    // Appointments from Firestore filtered by clientPhone
+    const apptQuery = query(
+      collection(db, 'appointments'),
+      where('clientPhone', '==', user.phone),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub2 = onSnapshot(apptQuery, (snap) => {
+      setAppointments(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Appointment, 'id'>) }))
+      );
+    });
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [user?.phone, isAdmin]);
 
   async function toggleFavorite(businessId: string) {
     if (!user || isAdmin) return;
@@ -91,27 +94,19 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         { merge: true }
       );
     } catch {
-      // revert on error
       setFavoriteIds(favoriteIds);
     }
   }
 
-  async function addAppointment(businessId: string, businessName: string, serviceName: string) {
-    if (!apptKey) return;
-    const appt: Appointment = {
-      id: Date.now().toString(),
-      businessId,
-      businessName,
-      serviceName,
+  async function addAppointment(params: AddAppointmentParams) {
+    await addDoc(collection(db, 'appointments'), {
+      ...params,
       createdAt: new Date().toISOString(),
-    };
-    const next = [appt, ...appointments];
-    setAppointments(next);
-    await AsyncStorage.setItem(apptKey, JSON.stringify(next));
+    });
   }
 
   return (
-    <UserDataContext.Provider value={{ favoriteIds, toggleFavorite, appointments, addAppointment, refresh }}>
+    <UserDataContext.Provider value={{ favoriteIds, toggleFavorite, appointments, addAppointment }}>
       {children}
     </UserDataContext.Provider>
   );

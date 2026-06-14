@@ -1,6 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusBarBlur } from '@/components/status-bar-blur';
@@ -46,31 +45,11 @@ function AppointmentCard({ appt }: { appt: Appointment }) {
 export default function AgendamentosScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { appointments, refresh } = useUserData();
-  const [refreshing, setRefreshing] = useState(false);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    try {
-      await refresh();
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  const { appointments } = useUserData();
 
   return (
     <ThemedView style={styles.container}>
       <ScrollView
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.text}
-            colors={[theme.text]}
-            progressBackgroundColor={theme.backgroundElement}
-            progressViewOffset={insets.top}
-          />
-        }
         contentContainerStyle={[
           styles.content,
           {

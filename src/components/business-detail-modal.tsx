@@ -17,9 +17,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { BottomTabInset, Spacing } from '@/constants/theme';
+import { addDoc, collection } from 'firebase/firestore';
 import { useAuth } from '@/context/auth-context';
 import { useData } from '@/context/data-context';
 import { useUserData } from '@/context/user-data-context';
+import { db } from '@/lib/firebase';
 import { useTheme } from '@/hooks/use-theme';
 import { Business, Service } from '@/types';
 
@@ -39,6 +41,19 @@ export function BusinessDetailModal({ business, visible, onClose }: Props) {
   const [pendingService, setPendingService] = useState<Service | null>(null);
 
   useEffect(() => {
+    if (visible && business) {
+      addDoc(collection(db, 'leads'), {
+        businessId: business.id,
+        businessName: business.name,
+        clientPhone: user?.phone ?? null,
+        clientName: user?.name ?? null,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, business?.id]);
+
+  useEffect(() => {
     if (!showAuth && pendingService && user && business) {
       const service = pendingService;
       const biz = business;
@@ -48,7 +63,7 @@ export function BusinessDetailModal({ business, visible, onClose }: Props) {
         `Deseja solicitar o serviço "${service.name}" via WhatsApp?`,
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Continuar no WhatsApp', onPress: () => openWhatsApp(biz.whatsapp, service.name, user.name) },
+          { text: 'Continuar no WhatsApp', onPress: () => openWhatsApp(biz.whatsapp, service.name) },
         ]
       );
     }
@@ -67,9 +82,19 @@ export function BusinessDetailModal({ business, visible, onClose }: Props) {
     .join('')
     .toUpperCase();
 
-  function openWhatsApp(phone: string, serviceName: string, userName: string) {
-    addAppointment(business!.id, business!.name, serviceName);
-    const message = `Olá! Meu nome é ${userName} e gostaria de agendar o serviço: *${serviceName}*. Poderia me informar a disponibilidade?`;
+  function openWhatsApp(phone: string, serviceName: string) {
+    if (user) {
+      addAppointment({
+        businessId: business!.id,
+        businessName: business!.name,
+        businessWhatsapp: business!.whatsapp,
+        serviceName,
+        clientPhone: user.phone,
+        clientName: user.name,
+        clientAvatarUrl: user.avatarUrl,
+      });
+    }
+    const message = `Olá! Meu nome é ${user?.name} e gostaria de agendar o serviço: *${serviceName}*. Poderia me informar a disponibilidade?`;
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     Linking.openURL(url).catch(() =>
       Alert.alert('Erro', 'Não foi possível abrir o WhatsApp.')
@@ -87,7 +112,7 @@ export function BusinessDetailModal({ business, visible, onClose }: Props) {
       `Deseja solicitar o serviço "${service.name}" via WhatsApp?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Continuar no WhatsApp', onPress: () => openWhatsApp(business!.whatsapp, service.name, user.name) },
+        { text: 'Continuar no WhatsApp', onPress: () => openWhatsApp(business!.whatsapp, service.name) },
       ]
     );
   }

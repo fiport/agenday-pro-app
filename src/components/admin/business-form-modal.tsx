@@ -13,6 +13,7 @@ import {
 
 import { ImagePickerField } from '@/components/admin/image-picker-field';
 import { TimePickerField } from '@/components/admin/time-picker-field';
+import { DatePickerField } from '@/components/date-picker-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -54,12 +55,6 @@ function toIso(ddmmyyyy: string): string | undefined {
   return isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function formatDateInput(text: string) {
-  const digits = text.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
 
 function formatPhoneDisplay(text: string) {
   const digits = text.replace(/\D/g, '').slice(0, 11);
@@ -89,7 +84,17 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
   const [whatsapp, setWhatsapp] = useState('');
   const [instagram, setInstagram] = useState('');
   const [facebook, setFacebook] = useState('');
-  const [address, setAddress] = useState('');
+  // structured address
+  const [cep, setCep] = useState('');
+  const [street, setStreet] = useState('');
+  const [addressNumber, setAddressNumber] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [lat, setLat] = useState<number | undefined>();
+  const [lng, setLng] = useState<number | undefined>();
+  const [cepLoading, setCepLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
   const [planExpiresAt, setPlanExpiresAt] = useState('');
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [hours, setHours] = useState<BusinessHours[]>(DEFAULT_HOURS);
@@ -141,7 +146,14 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
       setWhatsapp(phoneFromStorage(editing.whatsapp));
       setInstagram(editing.instagram ?? '');
       setFacebook(editing.facebook ?? '');
-      setAddress(editing.address ?? '');
+      setCep(editing.cep ?? '');
+      setStreet(editing.street ?? '');
+      setAddressNumber(editing.addressNumber ?? '');
+      setNeighborhood(editing.neighborhood ?? '');
+      setCity(editing.city ?? '');
+      setState(editing.state ?? '');
+      setLat(editing.lat);
+      setLng(editing.lng);
       setPlanExpiresAt(parseDate(editing.planExpiresAt));
       setLogoUri(editing.logoUrl ?? null);
       setHours(editing.hours.length ? editing.hours : DEFAULT_HOURS);
@@ -152,8 +164,10 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
       );
     } else {
       setName(''); setCategoryId(categories[0]?.id ?? '');
-      setDescription(''); setWhatsapp(''); setInstagram('');
-      setFacebook(''); setAddress(''); setPlanExpiresAt('');
+      setDescription(''); setWhatsapp(''); setInstagram(''); setFacebook('');
+      setCep(''); setStreet(''); setAddressNumber(''); setNeighborhood('');
+      setCity(''); setState(''); setLat(undefined); setLng(undefined);
+      setPlanExpiresAt('');
       setLogoUri(null);
       setHours(DEFAULT_HOURS);
       setServices([{ id: '1', name: '', price: '' }]);
@@ -163,6 +177,54 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
   function updateHour(index: number, field: keyof BusinessHours, value: string | boolean) {
     if (index === 0) mondayTouched.current = true;
     setHours((prev) => prev.map((h, i) => (i === index ? { ...h, [field]: value } : h)));
+  }
+
+  async function handleCepChange(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    const formatted = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    setCep(formatted);
+    if (digits.length === 8) {
+      setCepLoading(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+        const data = await res.json();
+        if (!data.erro) {
+          setStreet(data.logradouro ?? '');
+          setNeighborhood(data.bairro ?? '');
+          setCity(data.localidade ?? '');
+          setState(data.uf ?? '');
+          setLat(undefined);
+          setLng(undefined);
+        } else {
+          Alert.alert('CEP não encontrado', 'Verifique o CEP informado.');
+        }
+      } catch {
+        Alert.alert('Erro', 'Não foi possível consultar o CEP.');
+      } finally {
+        setCepLoading(false);
+      }
+    }
+  }
+
+  async function handleNumberBlur() {
+    if (!addressNumber.trim() || !street || !city || !state) return;
+    const fullAddress = `${street}, ${addressNumber}, ${neighborhood}, ${city}, ${state}, Brasil`;
+    setGeoLoading(true);
+    try {
+      const key = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY;
+      const url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(fullAddress)}&lang=pt&limit=1&apiKey=${key}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const feature = data?.features?.[0];
+      if (feature) {
+        setLat(feature.properties.lat);
+        setLng(feature.properties.lon);
+      }
+    } catch {
+      // noop — lat/lng stays undefined
+    } finally {
+      setGeoLoading(false);
+    }
   }
 
   function addService() {
@@ -176,6 +238,25 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
 
   function updateService(id: string, field: 'name' | 'price', value: string) {
     setServices((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+  }
+
+  async function resolveGeoIfNeeded(): Promise<{ resolvedLat?: number; resolvedLng?: number }> {
+    if (lat !== undefined && lng !== undefined) return { resolvedLat: lat, resolvedLng: lng };
+    if (!addressNumber.trim() || !street || !city || !state) return {};
+    const fullAddress = `${street}, ${addressNumber}, ${neighborhood}, ${city}, ${state}, Brasil`;
+    try {
+      const key = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY;
+      const url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(fullAddress)}&lang=pt&limit=1&apiKey=${key}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const feature = json?.features?.[0];
+      if (feature) {
+        return { resolvedLat: feature.properties.lat, resolvedLng: feature.properties.lon };
+      }
+    } catch {
+      // noop
+    }
+    return {};
   }
 
   async function handleSave() {
@@ -202,6 +283,8 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
 
     setSaving(true);
     try {
+      const { resolvedLat, resolvedLng } = await resolveGeoIfNeeded();
+
       let logoUrl: string | null | undefined = editing?.logoUrl;
       if (logoUri && !logoUri.startsWith('http')) {
         const path = `businesses/${Date.now()}.jpg`;
@@ -210,6 +293,10 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
         logoUrl = editing?.logoUrl ? null : undefined; // null → deleteField() in strip()
       }
 
+      // Compose display address from structured fields
+      const addressParts = [street, addressNumber, neighborhood, city, state].filter(Boolean);
+      const displayAddress = addressParts.length ? addressParts.join(', ') : undefined;
+
       const data: Omit<Business, 'id'> = {
         name: name.trim(),
         categoryId,
@@ -217,7 +304,15 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
         whatsapp: phoneToStorage(whatsapp),
         instagram: instagram.trim() || undefined,
         facebook: facebook.trim() || undefined,
-        address: address.trim() || undefined,
+        cep: cep.replace(/\D/g, '') || undefined,
+        street: street.trim() || undefined,
+        addressNumber: addressNumber.trim() || undefined,
+        neighborhood: neighborhood.trim() || undefined,
+        city: city.trim() || undefined,
+        state: state.trim() || undefined,
+        address: displayAddress,
+        lat: resolvedLat,
+        lng: resolvedLng,
         planExpiresAt: isoExpiry,
         logoUrl: logoUrl as string | undefined,
         hours,
@@ -331,19 +426,67 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
             </ThemedView>
           </FormField>
 
-          <FormField label="Endereço">
+          <FormField label={`CEP${cepLoading ? ' — buscando...' : ''}`}>
             <ThemedView type="backgroundElement" style={styles.inputWrapper}>
-              <TextInput style={[styles.input, { color: theme.text }]} placeholder="Rua, número – Bairro, Cidade"
-                placeholderTextColor={theme.textSecondary} value={address} onChangeText={setAddress} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="00000-000"
+                placeholderTextColor={theme.textSecondary}
+                value={cep}
+                onChangeText={handleCepChange}
+                keyboardType="number-pad"
+                maxLength={9}
+              />
             </ThemedView>
           </FormField>
 
-          <FormField label="Validade do Plano (DD/MM/AAAA)">
+          <View style={styles.addressRow}>
+            <FormField label="Rua" style={{ flex: 1 }}>
+              <ThemedView type="backgroundElement" style={styles.inputWrapper}>
+                <TextInput style={[styles.input, { color: theme.text }]} placeholder="Logradouro"
+                  placeholderTextColor={theme.textSecondary} value={street} onChangeText={setStreet} />
+              </ThemedView>
+            </FormField>
+            <FormField label={`Nº${geoLoading ? ' 📍' : lat ? ' ✓' : ''}`} style={{ width: 90 }}>
+              <ThemedView type="backgroundElement" style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  placeholder="123"
+                  placeholderTextColor={theme.textSecondary}
+                  value={addressNumber}
+                  onChangeText={setAddressNumber}
+                  onBlur={handleNumberBlur}
+                  keyboardType="number-pad"
+                />
+              </ThemedView>
+            </FormField>
+          </View>
+
+          <FormField label="Bairro">
             <ThemedView type="backgroundElement" style={styles.inputWrapper}>
-              <TextInput style={[styles.input, { color: theme.text }]} placeholder="31/12/2025"
-                placeholderTextColor={theme.textSecondary} value={planExpiresAt}
-                onChangeText={(t) => setPlanExpiresAt(formatDateInput(t))} keyboardType="number-pad" />
+              <TextInput style={[styles.input, { color: theme.text }]} placeholder="Bairro"
+                placeholderTextColor={theme.textSecondary} value={neighborhood} onChangeText={setNeighborhood} />
             </ThemedView>
+          </FormField>
+
+          <View style={styles.addressRow}>
+            <FormField label="Cidade" style={{ flex: 1 }}>
+              <ThemedView type="backgroundElement" style={styles.inputWrapper}>
+                <TextInput style={[styles.input, { color: theme.text }]} placeholder="Cidade"
+                  placeholderTextColor={theme.textSecondary} value={city} onChangeText={setCity} />
+              </ThemedView>
+            </FormField>
+            <FormField label="UF" style={{ width: 72 }}>
+              <ThemedView type="backgroundElement" style={styles.inputWrapper}>
+                <TextInput style={[styles.input, { color: theme.text }]} placeholder="SP"
+                  placeholderTextColor={theme.textSecondary} value={state} onChangeText={setState}
+                  autoCapitalize="characters" maxLength={2} />
+              </ThemedView>
+            </FormField>
+          </View>
+
+          <FormField label="Validade do Plano">
+            <DatePickerField value={planExpiresAt} onChange={setPlanExpiresAt} placeholder="Selecionar data de validade" />
           </FormField>
 
           {/* Business Hours */}
@@ -428,9 +571,9 @@ export function BusinessFormModal({ visible, editing, onClose }: Props) {
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+function FormField({ label, children, style }: { label: string; children: React.ReactNode; style?: object }) {
   return (
-    <View style={styles.field}>
+    <View style={[styles.field, style]}>
       <ThemedText type="small" style={styles.fieldLabel}>{label}</ThemedText>
       {children}
     </View>
@@ -446,6 +589,7 @@ const styles = StyleSheet.create({
   closeBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   body: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.four },
   field: { gap: Spacing.two },
+  addressRow: { flexDirection: 'row', gap: Spacing.two },
   fieldLabel: { fontWeight: '600', textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.6 },
   inputWrapper: { borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   input: { fontSize: 16, paddingVertical: Spacing.one },

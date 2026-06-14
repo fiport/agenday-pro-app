@@ -25,6 +25,10 @@ export default {
     ios: {
       icon: "./assets/images/icon.png",
       bundleIdentifier: "com.devacheiservicos.agenday",
+      infoPlist: {
+        NSLocationWhenInUseUsageDescription: "O Agenday usa sua localização para mostrar empresas e serviços próximos a você.",
+        NSLocationAlwaysAndWhenInUseUsageDescription: "O Agenday usa sua localização para mostrar empresas e serviços próximos a você.",
+      },
     },
 
     android: {
@@ -33,7 +37,11 @@ export default {
         backgroundColor: "#ffffff",
       },
       predictiveBackGestureEnabled: false,
-      permissions: ["android.permission.RECORD_AUDIO"],
+      permissions: [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+      ],
       package: "com.devacheiservicos.agenday",
     },
 
@@ -55,6 +63,13 @@ export default {
 
     plugins: [
       "expo-router",
+      [
+        "expo-location",
+        {
+          locationAlwaysAndWhenInUsePermission: "O Agenday precisa da sua localização para mostrar empresas próximas a você.",
+          locationWhenInUsePermission: "O Agenday precisa da sua localização para mostrar empresas próximas a você.",
+        },
+      ],
       [
         "expo-build-properties",
         {

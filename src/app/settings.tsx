@@ -7,12 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthModal } from '@/components/auth-modal';
 import { ChangePasswordModal } from '@/components/change-password-modal';
 import { EditProfileModal } from '@/components/edit-profile-modal';
+import { LegalModal } from '@/components/legal-modal';
 import { StatusBarBlur } from '@/components/status-bar-blur';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { PRIVACY_POLICY, TERMS_OF_USE, UPDATED_AT } from '@/constants/legal';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { ThemeMode, useThemeMode } from '@/context/theme-context';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 function SettingsRow({
@@ -93,6 +95,8 @@ export default function SettingsScreen() {
   const [showAuth, setShowAuth] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   function handleLogout() {
     Alert.alert('Sair', 'Deseja encerrar sua sessão?', [
@@ -226,11 +230,9 @@ export default function SettingsScreen() {
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
               APLICATIVO
             </ThemedText>
-            <SettingsRow
-              icon="info.circle"
-              label="Versão"
-              sublabel="1.0.0"
-            />
+            <SettingsRow icon="doc.text" label="Termos de Uso" onPress={() => setShowTerms(true)} />
+            <SettingsRow icon="lock.shield" label="Política de Privacidade" onPress={() => setShowPrivacy(true)} />
+            <SettingsRow icon="info.circle" label="Versão" sublabel="1.0.0" />
           </View>
         </View>
       </ScrollView>
@@ -247,6 +249,20 @@ export default function SettingsScreen() {
       <ChangePasswordModal
         visible={showChangePassword}
         onClose={() => setShowChangePassword(false)}
+      />
+      <LegalModal
+        visible={showTerms}
+        onClose={() => setShowTerms(false)}
+        title="Termos de Uso"
+        sections={TERMS_OF_USE}
+        updatedAt={UPDATED_AT}
+      />
+      <LegalModal
+        visible={showPrivacy}
+        onClose={() => setShowPrivacy(false)}
+        title="Política de Privacidade"
+        sections={PRIVACY_POLICY}
+        updatedAt={UPDATED_AT}
       />
       <StatusBarBlur height={insets.top} />
     </ThemedView>

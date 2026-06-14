@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { OnboardingOverlay } from '@/components/onboarding';
 import AppTabs from '@/components/app-tabs';
 import { AuthProvider } from '@/context/auth-context';
 import { DataProvider } from '@/context/data-context';
@@ -14,6 +15,7 @@ function ThemedApp() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
       <AppTabs />
+      <OnboardingOverlay />
     </ThemeProvider>
   );
 }
